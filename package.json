@@ -1,0 +1,90 @@
+{
+  "name": "visual-studio-code-desktop",
+  "version": "1.0.0",
+  "description": "AI-powered desktop application for screenshots and queries",
+  "main": "public/electron.js",
+  "homepage": "./",
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "electron": "electron .",
+    "electron-dev": "concurrently \"npm start\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron-pack": "npm run build && electron-builder",
+    "preelectron-pack": "npm run build",
+    "make-icons": "electron-icon-maker"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.11.1",
+    "@emotion/styled": "^11.11.0",
+    "@fontsource/jetbrains-mono": "^5.2.8",
+    "@fontsource/plus-jakarta-sans": "^5.2.8",
+    "@mui/icons-material": "^5.14.19",
+    "@mui/material": "^5.14.20",
+    "@reduxjs/toolkit": "^1.9.7",
+    "axios": "^1.6.2",
+    "dotenv": "^17.2.3",
+    "electron-audio-loopback": "^1.0.6",
+    "electron-icon-maker": "^0.0.5",
+    "openai": "^6.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^9.0.1",
+    "react-redux": "^8.1.3",
+    "react-router-dom": "^6.18.0",
+    "react-syntax-highlighter": "^15.5.0",
+    "socket.io-client": "^4.7.4",
+    "styled-components": "^6.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.9.0",
+    "@types/react": "^18.3.25",
+    "@types/react-dom": "^18.3.7",
+    "@types/react-syntax-highlighter": "^15.5.11",
+    "concurrently": "^8.2.2",
+    "electron": "^38.2.1",
+    "electron-builder": "^24.6.4",
+    "eslint-plugin-react-hooks": "^6.1.1",
+    "react-scripts": "5.0.1",
+    "typescript": "^4.9.5",
+    "wait-on": "^7.2.0"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "build": {
+    "appId": "com.aicheats.desktop",
+    "productName": "Visual Studio Code Desktop",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "build/**/*",
+      "public/electron.js",
+      "public/meetingsRenderer.js",
+      "public/assets/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "public/assets/vscode.icns"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "public/assets/vscode.ico"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}
