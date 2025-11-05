@@ -226,16 +226,50 @@ function createOverlayWindow() {
     show: false
   });
   
-  const startUrl = isDev 
-    ? 'http://localhost:3000' 
-    : `file://${path.join(__dirname, '../build/index.html')}`;
+  // Load the app - use loadFile for production, loadURL for dev
+  if (isDev) {
+    overlayWindow.loadURL('http://localhost:3000');
+  } else {
+    const appPath = app.getAppPath();
+    const indexPath = path.join(appPath, 'build', 'index.html');
+    
+    if (fs.existsSync(indexPath)) {
+      overlayWindow.loadFile(indexPath);
+    } else {
+      const possiblePaths = [
+        path.join(__dirname, '..', 'build', 'index.html'),
+        path.join(appPath, 'build', 'index.html'),
+        path.join(__dirname, 'build', 'index.html'),
+      ];
+      
+      // Add resourcesPath only if it exists (for packaged apps)
+      if (process.resourcesPath) {
+        possiblePaths.splice(1, 0, path.join(process.resourcesPath, 'app', 'build', 'index.html'));
+      }
+      
+      let foundPath = null;
+      for (const possiblePath of possiblePaths) {
+        if (fs.existsSync(possiblePath)) {
+          foundPath = possiblePath;
+          break;
+        }
+      }
+      
+      if (foundPath) {
+        overlayWindow.loadFile(foundPath);
+      } else {
+        console.error('Could not find index.html for overlay window');
+      }
+    }
+  }
   
-  overlayWindow.loadURL(startUrl);
-  
-  overlayWindow.setBounds(mainWindow.getBounds());
+  // Set bounds only if mainWindow exists
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    overlayWindow.setBounds(mainWindow.getBounds());
+  }
   
   overlayWindow.on('focus', () => {
-    if (mainWindow) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.focus();
     }
   });
@@ -417,18 +451,83 @@ function createWindow() {
 
   try { mainWindow.setOpacity(currentOpacity); } catch {}
 
-  const startUrl = isDev 
-    ? 'http://localhost:3000' 
-    : `file://${path.join(__dirname, '../build/index.html')}`;
-
- 
-
   const keyFromEnv = process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
   if (keyFromEnv) {
     try { audioService.setApiKey(keyFromEnv); } catch {}
   }
 
-  mainWindow.loadURL(startUrl);
+  // Load the app - use loadFile for production, loadURL for dev
+  if (isDev) {
+    const startUrl = 'http://localhost:3000';
+    mainWindow.loadURL(startUrl);
+    
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+      console.error('Failed to load dev server:', errorCode, errorDescription);
+      console.log('Make sure React dev server is running on http://localhost:3000');
+    });
+  } else {
+    // In production, use app.getAppPath() to get the correct path
+    // When packaged, __dirname points to the app's resources directory
+    const appPath = app.getAppPath();
+    const indexPath = path.join(appPath, 'build', 'index.html');
+    
+    // Verify the file exists before loading
+    if (fs.existsSync(indexPath)) {
+      console.log('Loading production build from:', indexPath);
+      mainWindow.loadFile(indexPath);
+    } else {
+      // Fallback: try different possible paths
+      const possiblePaths = [
+        path.join(__dirname, '..', 'build', 'index.html'),
+        path.join(appPath, 'build', 'index.html'),
+        path.join(__dirname, 'build', 'index.html'),
+      ];
+      
+      // Add resourcesPath only if it exists (for packaged apps)
+      if (process.resourcesPath) {
+        possiblePaths.splice(1, 0, path.join(process.resourcesPath, 'app', 'build', 'index.html'));
+      }
+      
+      let foundPath = null;
+      for (const possiblePath of possiblePaths) {
+        if (fs.existsSync(possiblePath)) {
+          foundPath = possiblePath;
+          console.log('Found build at:', foundPath);
+          break;
+        }
+      }
+      
+      if (foundPath) {
+        mainWindow.loadFile(foundPath);
+      } else {
+        console.error('Could not find index.html in any of these locations:');
+        possiblePaths.forEach(p => console.error('  -', p));
+        mainWindow.webContents.on('did-finish-load', () => {
+          mainWindow.webContents.executeJavaScript(`
+            document.body.innerHTML = '<div style="padding: 20px; font-family: system-ui; color: red;">
+              <h1>Error: Could not find build files</h1>
+              <p>Please rebuild the application:</p>
+              <pre>npm run build</pre>
+              <p>Build files should be in: ${appPath}/build/</p>
+            </div>';
+          `);
+        });
+      }
+    }
+    
+    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+      console.error('Failed to load production build:', errorCode, errorDescription);
+      console.error('Attempted URL:', validatedURL);
+      mainWindow.webContents.executeJavaScript(`
+        document.body.innerHTML = '<div style="padding: 20px; font-family: system-ui; color: red;">
+          <h1>Failed to load application</h1>
+          <p>Error: ${errorDescription}</p>
+          <p>Error Code: ${errorCode}</p>
+          <p>Please check the console for more details.</p>
+        </div>';
+      `);
+    });
+  }
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
