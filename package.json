@@ -71,6 +71,8 @@
     "files": [
       "build/**/*",
       "public/electron.js",
+      "public/preload.js",
+      "public/audioService.js",
       "public/meetingsRenderer.js",
       "public/assets/**/*",
       "node_modules/**/*"
