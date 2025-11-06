@@ -74,6 +74,7 @@
       "public/preload.js",
       "public/audioService.js",
       "public/meetingsRenderer.js",
+      "public/windowsAudioCapture.js",
       "public/assets/**/*",
       "node_modules/**/*"
     ],

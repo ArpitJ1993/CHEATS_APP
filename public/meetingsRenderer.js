@@ -260,16 +260,59 @@ let wavRecorder = new WavRecorder();
 let microphoneStream = null;
 let systemAudioStream = null;
 
-const micResults = document.getElementById('micResults');
-const speakerResults = document.getElementById('speakerResults');
-const micStatus = document.getElementById('micStatus');
-const micSelect = document.getElementById('micSelect');
-const speakerStatus = document.getElementById('speakerStatus');
-const recordStatus = document.getElementById('recordStatus');
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
-const recordBtn = document.getElementById('recordBtn');
-const modelSelect = document.getElementById('modelSelect');
+// Helper functions to get DOM elements safely (re-query to avoid stale references)
+// This ensures elements are found even if script loads before React renders
+function getMicResults() {
+    return document.getElementById('micResults');
+}
+
+function getSpeakerResults() {
+    return document.getElementById('speakerResults');
+}
+
+function getMicStatus() {
+    return document.getElementById('micStatus');
+}
+
+function getSpeakerStatus() {
+    return document.getElementById('speakerStatus');
+}
+
+function getMicSelect() {
+    return document.getElementById('micSelect');
+}
+
+function getRecordStatus() {
+    return document.getElementById('recordStatus');
+}
+
+function getStartBtn() {
+    return document.getElementById('startBtn');
+}
+
+function getStopBtn() {
+    return document.getElementById('stopBtn');
+}
+
+function getRecordBtn() {
+    return document.getElementById('recordBtn');
+}
+
+function getModelSelect() {
+    return document.getElementById('modelSelect');
+}
+
+// Cache references for backward compatibility (will be set on DOM ready)
+let micResults = null;
+let speakerResults = null;
+let micStatus = null;
+let micSelect = null;
+let speakerStatus = null;
+let recordStatus = null;
+let startBtn = null;
+let stopBtn = null;
+let recordBtn = null;
+let modelSelect = null;
 
 const CONFIG = {
     API_ENDPOINTS: {
@@ -285,30 +328,35 @@ const CONFIG = {
 
 function updateMicSelect() {
     navigator.mediaDevices.enumerateDevices().then(devices => {
-        if (micSelect) {
-            micSelect.innerHTML = '';
+        const micSelectEl = getMicSelect();
+        if (micSelectEl) {
+            micSelectEl.innerHTML = '';
         }
         devices.forEach(device => {
             if (device.kind === 'audioinput') {
                 const option = document.createElement('option');
                 option.value = device.deviceId;
                 option.textContent = device.label;
-                micSelect.appendChild(option);
+                if (micSelectEl) {
+                    micSelectEl.appendChild(option);
+                }
             }
         });
     });
 }
 
 function updateStatus(streamType, isConnected) {
-    const statusElement = streamType === 'microphone' ? micStatus : speakerStatus;
+    const statusElement = streamType === 'microphone' ? getMicStatus() : getSpeakerStatus();
     const label = streamType === 'microphone' ? 'Microphone' : 'System Audio';
 
-    if (isConnected) {
-        statusElement.textContent = `${label}: Connected`;
-        statusElement.className = 'status connected';
-    } else {
-        statusElement.textContent = `${label}: Disconnected`;
-        statusElement.className = 'status disconnected';
+    if (statusElement) {
+        if (isConnected) {
+            statusElement.textContent = `${label}: Connected`;
+            statusElement.className = 'status connected';
+        } else {
+            statusElement.textContent = `${label}: Disconnected`;
+            statusElement.className = 'status disconnected';
+        }
     }
 }
 
@@ -390,11 +438,21 @@ function handleMicrophoneTranscript(transcript) {
         return;
     }
 
+    const micEl = getMicResults();
+    if (!micEl) {
+        console.warn('[meetingsRenderer] micResults element not found');
+        return;
+    }
+
     const timestamp = new Date().toLocaleTimeString();
     const prefix = transcript.partial ? '' : `[${timestamp}]`;
 
-    micResults.textContent += `${prefix} ${text}\n`;
-    micResults.scrollTop = micResults.scrollHeight;
+    // Use textContent += to append, which triggers MutationObserver
+    micEl.textContent += `${prefix} ${text}\n`;
+    micEl.scrollTop = micEl.scrollHeight;
+    
+    // Force a mutation event by toggling a data attribute (ensures MutationObserver detects change)
+    micEl.setAttribute('data-last-update', Date.now().toString());
 }
 
 function handleSystemAudioTranscript(transcript) {
@@ -403,11 +461,21 @@ function handleSystemAudioTranscript(transcript) {
         return;
     }
 
+    const spkEl = getSpeakerResults();
+    if (!spkEl) {
+        console.warn('[meetingsRenderer] speakerResults element not found');
+        return;
+    }
+
     const timestamp = new Date().toLocaleTimeString();
     const prefix = transcript.partial ? '' : `[${timestamp}]`;
 
-    speakerResults.textContent += `${prefix} ${text}\n`;
-    speakerResults.scrollTop = speakerResults.scrollHeight;
+    // Use textContent += to append, which triggers MutationObserver
+    spkEl.textContent += `${prefix} ${text}\n`;
+    spkEl.scrollTop = spkEl.scrollHeight;
+    
+    // Force a mutation event by toggling a data attribute (ensures MutationObserver detects change)
+    spkEl.setAttribute('data-last-update', Date.now().toString());
 }
 
 function handleError(e, streamType) {
@@ -416,17 +484,108 @@ function handleError(e, streamType) {
     stop();
 }
 
+/**
+ * Platform detection utility
+ * @returns {string} Platform identifier: 'windows', 'mac', or 'linux'
+ */
+function detectPlatform() {
+    if (typeof navigator !== 'undefined' && navigator.platform) {
+        const platform = navigator.platform.toLowerCase();
+        if (platform.includes('win')) return 'windows';
+        if (platform.includes('mac')) return 'mac';
+    }
+    return 'linux';
+}
+
+/**
+ * macOS-specific system audio capture (ORIGINAL IMPLEMENTATION - DO NOT MODIFY)
+ * This function is kept exactly as it was to ensure macOS functionality remains unchanged
+ */
+async function captureSystemAudioMacOS() {
+    await window.electronAPI.enableLoopbackAudio();
+
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({
+        audio: {  
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+        },
+        video: true
+    });
+
+    await window.electronAPI.disableLoopbackAudio();
+
+    const videoTracks = displayStream.getTracks().filter(t => t.kind === 'video');
+    videoTracks.forEach(t => t.stop() && displayStream.removeTrack(t));
+
+    return displayStream;
+}
+
+/**
+ * Windows-specific system audio capture
+ * Uses Windows-specific helper with retry logic and error handling
+ */
+async function captureSystemAudioWindows() {
+    // Check if Windows audio capture helper is available
+    if (!window.WindowsAudioCapture || !window.WindowsAudioCapture.captureWindowsSystemAudio) {
+        throw new Error('Windows audio capture helper not loaded. Please ensure windowsAudioCapture.js is loaded before meetingsRenderer.js');
+    }
+
+    try {
+        const displayStream = await window.WindowsAudioCapture.captureWindowsSystemAudio({
+            audio: {
+                echoCancellation: false,
+                noiseSuppression: false,
+                autoGainControl: false
+            }
+        });
+        return displayStream;
+    } catch (error) {
+        // Ensure cleanup on error
+        if (window.WindowsAudioCapture && window.WindowsAudioCapture.disableLoopbackAudioSafe) {
+            await window.WindowsAudioCapture.disableLoopbackAudioSafe();
+        }
+        throw error;
+    }
+}
+
+/**
+ * Platform-agnostic system audio capture
+ * Routes to platform-specific implementation
+ */
+async function captureSystemAudio() {
+    const platform = detectPlatform();
+    console.log(`[Platform Detection] Detected platform: ${platform}`);
+
+    if (platform === 'windows') {
+        console.log('[Platform] Using Windows-specific audio capture');
+        return await captureSystemAudioWindows();
+    } else {
+        // macOS and Linux use the original implementation
+        console.log('[Platform] Using macOS/Linux audio capture (original implementation)');
+        return await captureSystemAudioMacOS();
+    }
+}
+
 async function start() {
     try {
-       
+        const startBtnEl = getStartBtn();
+        const stopBtnEl = getStopBtn();
+        const modelSelectEl = getModelSelect();
+        const micSelectEl = getMicSelect();
+        const recordBtnEl = getRecordBtn();
 
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        modelSelect.disabled = true;
+        if (!startBtnEl || !stopBtnEl || !modelSelectEl) {
+            throw new Error('Required UI elements not found. Please refresh the page.');
+        }
+
+        startBtnEl.disabled = true;
+        stopBtnEl.disabled = false;
+        modelSelectEl.disabled = true;
 
         microphoneStream = await navigator.mediaDevices.getUserMedia({
             audio: {
-                deviceId: micSelect && micSelect.value ? { exact: micSelect.value } : undefined,
+                deviceId: micSelectEl && micSelectEl.value ? { exact: micSelectEl.value } : undefined,
                 echoCancellation: true,
                 noiseSuppression: true,
                 autoGainControl: true
@@ -434,23 +593,8 @@ async function start() {
             video: false
         });
 
-        await window.electronAPI.enableLoopbackAudio();
-
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({
-            audio: {  
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false
-            },
-            video: true
-        });
-
-        await window.electronAPI.disableLoopbackAudio();
-
-        const videoTracks = displayStream.getTracks().filter(t => t.kind === 'video');
-        videoTracks.forEach(t => t.stop() && displayStream.removeTrack(t));
-
-        systemAudioStream = displayStream;
+        // Use platform-agnostic system audio capture
+        systemAudioStream = await captureSystemAudio();
 
         microphoneSession = new Session(window.electronAPI.apiKey, 'microphone');
         microphoneSession.onconnectionstatechange = state => {
@@ -470,7 +614,7 @@ async function start() {
 
         const sessionConfig = {
             input_audio_transcription: {
-                model: modelSelect.value,
+                model: modelSelectEl.value,
                 prompt: "",
             },
             turn_detection: {
@@ -481,10 +625,12 @@ async function start() {
 
         await Promise.all([
             microphoneSession.startTranscription(microphoneStream, sessionConfig),
-            systemAudioSession.startTranscription(displayStream, sessionConfig)
+            systemAudioSession.startTranscription(systemAudioStream, sessionConfig)
         ]);
 
-        recordBtn.disabled = false;
+        if (recordBtnEl) {
+            recordBtnEl.disabled = false;
+        }
         console.log('Transcription started for both streams');
 
     } catch (error) {
@@ -495,10 +641,17 @@ async function start() {
 }
 
 function stop() {
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    recordBtn.disabled = true;
-    modelSelect.disabled = false;
+    const startBtnEl = getStartBtn();
+    const stopBtnEl = getStopBtn();
+    const recordBtnEl = getRecordBtn();
+    const modelSelectEl = getModelSelect();
+    const micEl = getMicResults();
+    const spkEl = getSpeakerResults();
+
+    if (startBtnEl) startBtnEl.disabled = false;
+    if (stopBtnEl) stopBtnEl.disabled = true;
+    if (recordBtnEl) recordBtnEl.disabled = true;
+    if (modelSelectEl) modelSelectEl.disabled = false;
 
     if (wavRecorder.isRecording) {
         wavRecorder.stopRecording();
@@ -523,19 +676,32 @@ function stop() {
     updateRecordStatus(false);
 
     const timestamp = new Date().toLocaleTimeString();
-    micResults.textContent = `[${timestamp}] Waiting for microphone input...\n`;
-    speakerResults.textContent = `[${timestamp}] Waiting for system audio...\n`;
+    if (micEl) {
+        micEl.textContent = `[${timestamp}] Waiting for microphone input...\n`;
+        micEl.setAttribute('data-last-update', Date.now().toString());
+    }
+    if (spkEl) {
+        spkEl.textContent = `[${timestamp}] Waiting for system audio...\n`;
+        spkEl.setAttribute('data-last-update', Date.now().toString());
+    }
 }
 
 function updateRecordStatus(isRecording) {
-    if (isRecording) {
-        recordStatus.textContent = 'Recording: Active';
-        recordStatus.className = 'status connected';
-        recordBtn.textContent = 'Stop Recording';
-    } else {
-        recordStatus.textContent = 'Recording: Stopped';
-        recordStatus.className = 'status disconnected';
-        recordBtn.textContent = 'Start Recording';
+    const recordStatusEl = getRecordStatus();
+    const recordBtnEl = getRecordBtn();
+    
+    if (recordStatusEl) {
+        if (isRecording) {
+            recordStatusEl.textContent = 'Recording: Active';
+            recordStatusEl.className = 'status connected';
+        } else {
+            recordStatusEl.textContent = 'Recording: Stopped';
+            recordStatusEl.className = 'status disconnected';
+        }
+    }
+    
+    if (recordBtnEl) {
+        recordBtnEl.textContent = isRecording ? 'Stop Recording' : 'Start Recording';
     }
 }
 
@@ -554,12 +720,29 @@ async function toggleRecording() {
     }
 }
 
-if (startBtn && stopBtn && recordBtn) {
-    startBtn.addEventListener('click', start);
-    stopBtn.addEventListener('click', stop);
-    recordBtn.addEventListener('click', toggleRecording);
+// Initialize event listeners when DOM is ready
+function initializeEventListeners() {
+    const startBtnEl = getStartBtn();
+    const stopBtnEl = getStopBtn();
+    const recordBtnEl = getRecordBtn();
+    
+    if (startBtnEl && stopBtnEl && recordBtnEl) {
+        startBtnEl.addEventListener('click', start);
+        stopBtnEl.addEventListener('click', stop);
+        recordBtnEl.addEventListener('click', toggleRecording);
+        updateMicSelect();
+    } else {
+        // Retry if elements aren't ready yet
+        setTimeout(initializeEventListeners, 100);
+    }
 }
-updateMicSelect();
+
+// Wait for DOM to be ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeEventListeners);
+} else {
+    initializeEventListeners();
+}
 
 window.addEventListener('beforeunload', stop);
 
