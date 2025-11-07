@@ -109,6 +109,7 @@ export const MeetingsPage: React.FC = () => {
     const script = document.createElement('script');
     // Use relative path in production so file:// resolves to build/meetingsRenderer.js
     script.src = isDev ? '/meetingsRenderer.js' : 'meetingsRenderer.js';
+    script.type = 'module';
     script.async = true;
     document.body.appendChild(script);
 
@@ -203,8 +204,8 @@ export const MeetingsPage: React.FC = () => {
           <Grid item xs={12}>
             <Paper elevation={1} style={{ padding: 12 }}>
               <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
-                <button 
-                  id="startBtn" 
+                <button
+                  id="startMicBtn"
                   type="button"
                   style={{
                     padding: '6px 16px',
@@ -219,11 +220,29 @@ export const MeetingsPage: React.FC = () => {
                     boxShadow: '0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12)'
                   }}
                 >
-                  Start Streaming
+                  Start Microphone
                 </button>
-                <button 
-                  id="stopBtn" 
-                  type="button" 
+                <button
+                  id="startSystemBtn"
+                  type="button"
+                  style={{
+                    padding: '6px 16px',
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                    borderRadius: '4px',
+                    border: 'none',
+                    backgroundColor: '#388e3c',
+                    color: 'white',
+                    cursor: 'pointer',
+                    textTransform: 'uppercase',
+                    boxShadow: '0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12)'
+                  }}
+                >
+                  Start System Audio Capture
+                </button>
+                <button
+                  id="stopBtn"
+                  type="button"
                   disabled
                   style={{
                     padding: '5px 15px',
@@ -237,7 +256,7 @@ export const MeetingsPage: React.FC = () => {
                     textTransform: 'uppercase'
                   }}
                 >
-                  Stop Streaming
+                  Stop All
                 </button>
                 {/* Hidden record button to preserve renderer references without exposing UI */}
                 <button id="recordBtn" style={{ display: 'none' }}>Start Recording</button>

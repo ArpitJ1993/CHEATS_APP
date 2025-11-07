@@ -74,6 +74,7 @@
       "public/preload.js",
       "public/audioService.js",
       "public/meetingsRenderer.js",
+      "public/meetings/**/*",
       "public/assets/**/*",
       "node_modules/**/*"
     ],
