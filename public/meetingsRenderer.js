@@ -484,89 +484,6 @@ function handleError(e, streamType) {
     stop();
 }
 
-/**
- * Platform detection utility
- * @returns {string} Platform identifier: 'windows', 'mac', or 'linux'
- */
-function detectPlatform() {
-    if (typeof navigator !== 'undefined' && navigator.platform) {
-        const platform = navigator.platform.toLowerCase();
-        if (platform.includes('win')) return 'windows';
-        if (platform.includes('mac')) return 'mac';
-    }
-    return 'linux';
-}
-
-/**
- * macOS-specific system audio capture (ORIGINAL IMPLEMENTATION - DO NOT MODIFY)
- * This function is kept exactly as it was to ensure macOS functionality remains unchanged
- */
-async function captureSystemAudioMacOS() {
-    await window.electronAPI.enableLoopbackAudio();
-
-    const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        audio: {  
-            echoCancellation: false,
-            noiseSuppression: false,
-            autoGainControl: false
-        },
-        video: true
-    });
-
-    await window.electronAPI.disableLoopbackAudio();
-
-    const videoTracks = displayStream.getTracks().filter(t => t.kind === 'video');
-    videoTracks.forEach(t => t.stop() && displayStream.removeTrack(t));
-
-    return displayStream;
-}
-
-/**
- * Windows-specific system audio capture
- * Uses Windows-specific helper with retry logic and error handling
- */
-async function captureSystemAudioWindows() {
-    // Check if Windows audio capture helper is available
-    if (!window.WindowsAudioCapture || !window.WindowsAudioCapture.captureWindowsSystemAudio) {
-        throw new Error('Windows audio capture helper not loaded. Please ensure windowsAudioCapture.js is loaded before meetingsRenderer.js');
-    }
-
-    try {
-        const displayStream = await window.WindowsAudioCapture.captureWindowsSystemAudio({
-            audio: {
-                echoCancellation: false,
-                noiseSuppression: false,
-                autoGainControl: false
-            }
-        });
-        return displayStream;
-    } catch (error) {
-        // Ensure cleanup on error
-        if (window.WindowsAudioCapture && window.WindowsAudioCapture.disableLoopbackAudioSafe) {
-            await window.WindowsAudioCapture.disableLoopbackAudioSafe();
-        }
-        throw error;
-    }
-}
-
-/**
- * Platform-agnostic system audio capture
- * Routes to platform-specific implementation
- */
-async function captureSystemAudio() {
-    const platform = detectPlatform();
-    console.log(`[Platform Detection] Detected platform: ${platform}`);
-
-    if (platform === 'windows') {
-        console.log('[Platform] Using Windows-specific audio capture');
-        return await captureSystemAudioWindows();
-    } else {
-        // macOS and Linux use the original implementation
-        console.log('[Platform] Using macOS/Linux audio capture (original implementation)');
-        return await captureSystemAudioMacOS();
-    }
-}
-
 async function start() {
     try {
         const startBtnEl = getStartBtn();
@@ -593,8 +510,19 @@ async function start() {
             video: false
         });
 
-        // Use platform-agnostic system audio capture
-        systemAudioStream = await captureSystemAudio();
+        await window.electronAPI.enableLoopbackAudio();
+
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+            audio: true,
+            video: true
+        });
+
+        await window.electronAPI.disableLoopbackAudio();
+
+        const videoTracks = displayStream.getTracks().filter(t => t.kind === 'video');
+        videoTracks.forEach(t => t.stop() && displayStream.removeTrack(t));
+
+        systemAudioStream = displayStream;
 
         microphoneSession = new Session(window.electronAPI.apiKey, 'microphone');
         microphoneSession.onconnectionstatechange = state => {
@@ -625,7 +553,7 @@ async function start() {
 
         await Promise.all([
             microphoneSession.startTranscription(microphoneStream, sessionConfig),
-            systemAudioSession.startTranscription(systemAudioStream, sessionConfig)
+            systemAudioSession.startTranscription(displayStream, sessionConfig)
         ]);
 
         if (recordBtnEl) {

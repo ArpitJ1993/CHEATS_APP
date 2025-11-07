@@ -105,28 +105,12 @@ export const MeetingsPage: React.FC = () => {
     }
 
     const isDev = process.env.NODE_ENV === 'development' || process.env.REACT_APP_DEV === 'true';
-    
-    // Load Windows audio capture helper first (loads before meetingsRenderer)
-    const windowsScript = document.createElement('script');
-    windowsScript.src = isDev ? '/windowsAudioCapture.js' : 'windowsAudioCapture.js';
-    windowsScript.async = false; // Load synchronously to ensure it's available
-    document.body.appendChild(windowsScript);
-    
-    // Load meetings renderer script after Windows helper
+
     const script = document.createElement('script');
     // Use relative path in production so file:// resolves to build/meetingsRenderer.js
     script.src = isDev ? '/meetingsRenderer.js' : 'meetingsRenderer.js';
     script.async = true;
-    // Wait for Windows script to load before loading meetingsRenderer
-    windowsScript.onload = () => {
-      document.body.appendChild(script);
-    };
-    windowsScript.onerror = () => {
-      // If Windows script fails to load, still load meetingsRenderer
-      // (it will handle Windows detection gracefully)
-      console.warn('Windows audio capture helper failed to load, continuing anyway');
-      document.body.appendChild(script);
-    };
+    document.body.appendChild(script);
 
     return () => {
       try {
@@ -134,9 +118,6 @@ export const MeetingsPage: React.FC = () => {
         (window as any).__meetingsRendererLoaded = false;
         if (script.parentNode) {
           document.body.removeChild(script);
-        }
-        if (windowsScript.parentNode) {
-          document.body.removeChild(windowsScript);
         }
       } catch (e) {
         // Script might already be removed
