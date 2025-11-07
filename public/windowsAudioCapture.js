@@ -114,44 +114,44 @@ async function captureSystemAudioWindows(options = {}, maxRetries = 3, retryDela
         throw new Error('getDisplayMedia API is not supported in this browser/environment');
     }
     
+    // Enable loopback audio ONCE before attempting capture
+    // According to electron-audio-loopback docs, enable once, then call getDisplayMedia
+    console.log('[Windows] Enabling loopback audio before capture attempts...');
+    await enableLoopbackAudioWithRetry(3, 800);
+    
+    // Add delay to ensure plugin has fully intercepted getDisplayMedia
+    console.log('[Windows] Waiting 2000ms for plugin to intercept getDisplayMedia...');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
     let lastError = null;
+    let displayStream = null;
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             console.log(`[Windows] Attempting to capture system audio (attempt ${attempt}/${maxRetries})`);
             
-            // Ensure loopback audio is enabled before each attempt with longer delay
-            // Use longer delay to ensure plugin has time to intercept getDisplayMedia
-            await enableLoopbackAudioWithRetry(2, 800);
-            
-            // Add additional delay after enabling loopback to ensure plugin is ready
-            // This is critical - the plugin needs time to set up its interception
-            const pluginReadyDelay = attempt === 1 ? 1500 : 800;
-            console.log(`[Windows] Waiting ${pluginReadyDelay}ms for plugin to be ready...`);
-            await new Promise(resolve => setTimeout(resolve, pluginReadyDelay));
-            
-            // Windows requires video: true even if we only want audio
-            // According to electron-audio-loopback docs, video MUST be true
+            // CRITICAL: According to electron-audio-loopback README, audio must be a boolean (true)
+            // NOT an object! The plugin expects: { video: true, audio: true }
             const displayMediaOptions = {
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false,
-                    ...options.audio
-                },
                 video: true, // REQUIRED - plugin won't work without this
-                ...options
+                audio: true  // MUST be boolean true, not an object!
             };
             
-            // Remove any video-specific options that might interfere
-            delete displayMediaOptions.video;
-            displayMediaOptions.video = true; // Ensure video is explicitly true
+            // Don't merge options.audio if it's an object - the plugin needs boolean true
+            // Only merge other non-audio/video options if needed
+            if (options && typeof options === 'object') {
+                Object.keys(options).forEach(key => {
+                    if (key !== 'audio' && key !== 'video') {
+                        displayMediaOptions[key] = options[key];
+                    }
+                });
+            }
             
             console.log('[Windows] Calling getDisplayMedia with options:', JSON.stringify(displayMediaOptions, null, 2));
             
             // Capture display media (includes system audio on Windows)
             // The electron-audio-loopback plugin intercepts this call
-            const displayStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
+            displayStream = await navigator.mediaDevices.getDisplayMedia(displayMediaOptions);
             
             // Verify we got audio tracks
             const audioTracks = displayStream.getAudioTracks();
@@ -193,6 +193,7 @@ async function captureSystemAudioWindows(options = {}, maxRetries = 3, retryDela
                 console.error('  2. Windows audio permissions not granted');
                 console.error('  3. Audio drivers not supporting loopback capture');
                 console.error('  4. Plugin did not intercept getDisplayMedia call (timing issue)');
+                console.error('  5. getDisplayMedia was called with incorrect options (audio must be boolean true)');
                 
                 if (attempt < maxRetries) {
                     const waitTime = attempt * 1000; // Longer wait for NotSupportedError
@@ -208,18 +209,25 @@ async function captureSystemAudioWindows(options = {}, maxRetries = 3, retryDela
         }
     }
     
-    // Provide helpful error message with troubleshooting steps
-    const errorMessage = lastError?.name === 'NotSupportedError' 
-        ? 'System audio capture is not supported on Windows. Troubleshooting steps:\n\n' +
-          '1. Ensure electron-audio-loopback is properly initialized (check main process console)\n' +
-          '2. Grant Windows audio permissions in Settings > Privacy > Microphone\n' +
-          '3. Update audio drivers to latest version\n' +
-          '4. Restart the application after granting permissions\n' +
-          '5. Check if other applications can capture system audio\n\n' +
-          'If the issue persists, this may be a limitation of your Windows audio drivers.'
-        : `Failed to capture system audio after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`;
+    // Disable loopback audio after all attempts (success or failure)
+    await disableLoopbackAudioSafe();
     
-    throw new Error(errorMessage);
+    // If we failed, throw error
+    if (!displayStream) {
+        const errorMessage = lastError?.name === 'NotSupportedError' 
+            ? 'System audio capture is not supported on Windows. Troubleshooting steps:\n\n' +
+              '1. Ensure electron-audio-loopback is properly initialized (check main process console)\n' +
+              '2. Grant Windows audio permissions in Settings > Privacy > Microphone\n' +
+              '3. Update audio drivers to latest version\n' +
+              '4. Restart the application after granting permissions\n' +
+              '5. Check if other applications can capture system audio\n\n' +
+              'If the issue persists, this may be a limitation of your Windows audio drivers.'
+            : `Failed to capture system audio after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`;
+        
+        throw new Error(errorMessage);
+    }
+    
+    return displayStream;
 }
 
 /**
@@ -255,6 +263,7 @@ async function captureWindowsSystemAudio(options = {}) {
     
     try {
         // Capture system audio with Windows-specific handling
+        // Note: captureSystemAudioWindows handles enable/disable of loopback audio internally
         displayStream = await captureSystemAudioWindows(options);
         
         // Remove video tracks as per electron-audio-loopback documentation
@@ -273,6 +282,8 @@ async function captureWindowsSystemAudio(options = {}) {
         if (displayStream) {
             displayStream.getTracks().forEach(track => track.stop());
         }
+        // Note: captureSystemAudioWindows already disables loopback audio on error
+        // But we'll call it again here as a safety measure
         await disableLoopbackAudioSafe();
         throw error;
     }
