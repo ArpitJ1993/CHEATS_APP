@@ -1,15 +1,25 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { AppSettings } from '../types';
+import type { VendorId } from '../vendors/types';
 
 interface SettingsSliceState {
   settings: AppSettings;
   isLoaded: boolean;
 }
 
+const createDefaultVendorKeys = (): Record<VendorId, string> => ({
+  openai: '',
+  gemini: '',
+  anthropic: '',
+  perplexity: ''
+});
+
 const defaultSettings: AppSettings = {
   theme: 'auto',
   fontSize: 'medium',
   apiKey: '',
+  vendor: 'openai',
+  vendorKeys: createDefaultVendorKeys(),
   userName: '',
   participantName: '',
   maxScreenshots: 5,
@@ -38,11 +48,36 @@ const settingsSlice = createSlice({
   initialState,
   reducers: {
     loadSettings: (state, action: PayloadAction<AppSettings>) => {
-      state.settings = { ...defaultSettings, ...action.payload };
+      state.settings = {
+        ...defaultSettings,
+        ...action.payload,
+        vendorKeys: {
+          ...createDefaultVendorKeys(),
+          ...(action.payload.vendorKeys || {})
+        }
+      };
+      state.settings.apiKey = state.settings.vendorKeys[state.settings.vendor] || '';
       state.isLoaded = true;
     },
     updateSettings: (state, action: PayloadAction<Partial<AppSettings>>) => {
-      state.settings = { ...state.settings, ...action.payload };
+      const vendorKeys = action.payload.vendorKeys
+        ? { ...state.settings.vendorKeys, ...action.payload.vendorKeys }
+        : state.settings.vendorKeys;
+      state.settings = { ...state.settings, ...action.payload, vendorKeys };
+      state.settings.apiKey = state.settings.vendorKeys[state.settings.vendor] || '';
+    },
+    setVendor: (state, action: PayloadAction<VendorId>) => {
+      state.settings.vendor = action.payload;
+      state.settings.apiKey = state.settings.vendorKeys[action.payload] || '';
+    },
+    setVendorApiKey: (state, action: PayloadAction<{ vendor: VendorId; key: string }>) => {
+      state.settings.vendorKeys = {
+        ...state.settings.vendorKeys,
+        [action.payload.vendor]: action.payload.key
+      };
+      if (state.settings.vendor === action.payload.vendor) {
+        state.settings.apiKey = action.payload.key;
+      }
     },
     setTheme: (state, action: PayloadAction<'light' | 'dark' | 'auto'>) => {
       state.settings.theme = action.payload;
@@ -51,7 +86,13 @@ const settingsSlice = createSlice({
       state.settings.fontSize = action.payload;
     },
     setApiKey: (state, action: PayloadAction<string>) => {
-      state.settings.apiKey = action.payload;
+      state.settings.vendorKeys = {
+        ...state.settings.vendorKeys,
+        openai: action.payload
+      };
+      if (state.settings.vendor === 'openai') {
+        state.settings.apiKey = action.payload;
+      }
     },
     setMaxScreenshots: (state, action: PayloadAction<number>) => {
       state.settings.maxScreenshots = action.payload;
@@ -66,7 +107,10 @@ const settingsSlice = createSlice({
       state.settings.shortcuts[action.payload.key] = action.payload.value;
     },
     resetSettings: (state) => {
-      state.settings = defaultSettings;
+      state.settings = {
+        ...defaultSettings,
+        vendorKeys: createDefaultVendorKeys()
+      };
     },
   },
 });
@@ -74,6 +118,8 @@ const settingsSlice = createSlice({
 export const {
   loadSettings,
   updateSettings,
+  setVendor,
+  setVendorApiKey,
   setTheme,
   setFontSize,
   setApiKey,

@@ -2,7 +2,6 @@ import { dom } from './meetings/dom.js';
 import { initializeUi, setMicrophoneButtonState, setSystemButtonState, setStopButtonEnabled, setModelDisabled, setRecordButtonEnabled, updateRecordStatus, showError } from './meetings/ui.js';
 import { startMicrophoneCapture, startSystemCapture, stopAllCaptures, getActiveStreams } from './meetings/streams.js';
 import { recorder } from './meetings/recorder.js';
-import { resetTranscriptionState } from './meetings/transcription.js';
 
 if (window.__meetingsRendererLoaded) {
   console.debug('meetingsRenderer already loaded; skipping re-init');

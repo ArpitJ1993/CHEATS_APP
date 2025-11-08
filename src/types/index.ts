@@ -1,3 +1,4 @@
+import type { VendorId } from '../vendors/types';
 // Speech Recognition types
 export interface SpeechRecognition extends EventTarget {
   continuous: boolean;
@@ -143,6 +144,8 @@ export interface AppSettings {
   theme: 'light' | 'dark' | 'auto';
   fontSize: 'small' | 'medium' | 'large';
   apiKey: string;
+  vendor: VendorId;
+  vendorKeys: Record<VendorId, string>;
   userName: string;
   participantName: string;
   maxScreenshots: number;

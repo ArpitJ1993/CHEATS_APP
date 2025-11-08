@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from '@emotion/styled';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
@@ -18,11 +18,12 @@ import { addNotification } from '../slices/appSlice';
 import { addError } from '../slices/errorSlice';
 import { APIError } from '../data';
 import { generateFilename } from '../utils';
-import OpenAIService from '../data/openaiService';
 import { AudioRecorderComponent } from './AudioRecorderComponent';
 import { ThemeToggle } from './ThemeToggle';
 import { setCurrentView } from '../slices/appSlice';
 import { OpacityControl } from './OpacityControl';
+import { createVendorProvider, getVendorMetadata } from '../vendors';
+import type { VendorProvider } from '../vendors';
 
 // Declare global window.electronAPI
 declare global {
@@ -127,11 +128,12 @@ export const MainInterface: React.FC = () => {
   const { currentResponse, isStreaming } = useSelector((state: RootState) => state.conversations);
   const { settings } = useSelector((state: RootState) => state.settings);
 
-  // Initialize OpenAI service
-  const [openaiService] = useState(() => {
-    const apiKey = settings.apiKey || process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
-    return new OpenAIService(apiKey);
-  });
+  const vendorMetadata = useMemo(() => getVendorMetadata(settings.vendor), [settings.vendor]);
+  const vendorKey = settings.vendorKeys?.[settings.vendor] || '';
+
+  const provider = useMemo<VendorProvider>(() => {
+    return createVendorProvider(settings.vendor, vendorKey);
+  }, [settings.vendor, vendorKey]);
 
   const handleAudioTranscription = useCallback((transcribedText: string) => {
     if (transcribedText.trim()) {
@@ -200,82 +202,78 @@ export const MainInterface: React.FC = () => {
       return;
     }
 
+    if (!vendorKey) {
+      dispatch(addNotification({
+        type: 'warning',
+        message: `Add your ${vendorMetadata.label} API key in Settings before submitting.`
+      }));
+      return;
+    }
+
+    if (screenshots.length > 0 && (!provider.streamMultimodal || !provider.supportsImages)) {
+      dispatch(addNotification({
+        type: 'warning',
+        message: `${vendorMetadata.label} does not currently support screenshot analysis in this app.`
+      }));
+      return;
+    }
+
     setIsSubmitting(true);
     dispatch(startResponse(''));
 
     try {
       let fullResponse = '';
 
-      if (screenshots.length > 0) {
-        const screenshotsData = screenshots.map(s => s.data);
-        
-        const messages = [
-          {
-            role: 'system' as const,
-            content: 'You are an expert AI assistant with advanced image analysis capabilities. You can see and analyze screenshots, diagrams, code, UI elements, and any visual content. Provide detailed, accurate, and helpful analysis of the images provided. If the user asks specific questions about the images, answer them thoroughly. If no specific question is asked, provide a comprehensive analysis of what you see in the screenshots.',
-          },
-          {
-            role: 'user' as const,
-            content: query.trim() || 'Please analyze these screenshots and provide detailed insights about what you see. Describe the content, identify any important elements, and provide helpful observations.',
-          },
-        ];
-        
-        fullResponse = await openaiService.sendMessageWithImages(
-          messages,
-          screenshotsData,
-          (chunk) => {
-            fullResponse += chunk;
-            dispatch(updateResponse(fullResponse));
-          },
-          () => {
-            dispatch(completeResponse());
-            setIsSubmitting(false);
-            setQuery('');
-            dispatch(clearScreenshots());
-          },
-          (error) => {
-            console.error('Multimodal API error:', error);
-            dispatch(addError({
-              type: 'api',
-              message: error.message,
-              details: error instanceof APIError ? error.toSerializable() : { name: (error as Error).name, message: (error as Error).message }
-            }));
-            setIsSubmitting(false);
-          }
-        );
-      } else if (query.trim()) {
-        const messages = [
-          {
-            role: 'system' as const,
-            content: 'You are an expert AI assistant powered by GPT-4. Provide accurate, detailed, and helpful responses to user queries. Be thorough in your analysis and explanations.',
-          },
-          {
-            role: 'user' as const,
-            content: query,
-          },
-        ];
+      const baseMessages = [
+        {
+          role: 'system' as const,
+          content: 'You are an expert AI assistant. Provide accurate, detailed, and helpful responses to user queries. Be thorough in your analysis and explanations.'
+        },
+        {
+          role: 'user' as const,
+          content: query
+        }
+      ];
 
-        fullResponse = await openaiService.sendMessage(
-          messages,
-          (chunk) => {
-            fullResponse += chunk;
-            dispatch(updateResponse(fullResponse));
-          },
-          () => {
-            dispatch(completeResponse());
-            setIsSubmitting(false);
-            setQuery('');
-          },
-          (error) => {
-            console.error('Text-only API error:', error);
-            dispatch(addError({
-              type: 'api',
-              message: error.message,
-              details: error instanceof APIError ? error.toSerializable() : { name: (error as Error).name, message: (error as Error).message }
-            }));
-            setIsSubmitting(false);
+      const callbacks = {
+        onChunk: (chunk: string) => {
+          fullResponse += chunk;
+          dispatch(updateResponse(fullResponse));
+        },
+        onComplete: () => {
+          dispatch(completeResponse());
+          setIsSubmitting(false);
+          setQuery('');
+          if (screenshots.length > 0) {
+            dispatch(clearScreenshots());
           }
-        );
+        },
+        onError: (error: Error) => {
+          dispatch(addError({
+            type: 'api',
+            message: error.message,
+            details: error instanceof APIError ? error.toSerializable() : { name: error.name, message: error.message }
+          }));
+          dispatch(completeResponse());
+          setIsSubmitting(false);
+        }
+      };
+
+      if (screenshots.length > 0) {
+         const screenshotsData = screenshots.map((s) => s.data);
+         const imageMessages = [
+           baseMessages[0],
+           {
+             role: 'user' as const,
+             content: query.trim() || 'Please analyze these screenshots and provide detailed insights.'
+           }
+         ];
+        if (!provider.streamMultimodal) {
+          throw new Error('This provider does not support multimodal streaming.');
+        }
+        await provider.streamMultimodal(imageMessages, screenshotsData, callbacks);
+      } else if (query.trim()) {
+        await provider.streamText(baseMessages, callbacks);
       }
     } catch (error) {
       console.error('Query submission error:', error);
@@ -287,9 +285,10 @@ export const MainInterface: React.FC = () => {
           message: error.message
         } : String(error)
       }));
+      dispatch(completeResponse());
       setIsSubmitting(false);
     }
-  }, [query, screenshots, dispatch, openaiService]);
+  }, [query, screenshots, dispatch, provider, vendorMetadata.label, vendorKey]);
 
   const handleReset = useCallback(() => {
     setQuery('');
@@ -415,8 +414,13 @@ export const MainInterface: React.FC = () => {
 
             <AudioRecorderComponent 
               onTranscriptionComplete={handleAudioTranscription}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !vendorMetadata.supportsAudioRecorder}
             />
+            {!vendorMetadata.supportsAudioRecorder && (
+              <span style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>
+                Voice recording is currently available only with vendors that support this feature (e.g., OpenAI).
+              </span>
+            )}
           </InputSection>
 
           <ScreenshotGallery 

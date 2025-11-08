@@ -19,10 +19,26 @@ function getModelValue() {
   return dom.modelSelect?.value || 'whisper-1';
 }
 
+function getMeetingsConfig() {
+  return window.__meetingsConfig || {};
+}
+
+function ensureVendorSupportsAudio() {
+  const config = getMeetingsConfig();
+  if (config.vendorId && config.vendorId !== 'openai') {
+    throw new Error(`${config.vendorLabel || 'Selected vendor'} does not support realtime meeting audio yet.`);
+  }
+  if (!config.apiKey) {
+    throw new Error('OpenAI API key not configured. Add it in Settings.');
+  }
+  return config;
+}
+
 export async function startMicrophoneCapture() {
   setMicrophoneButtonState('busy');
 
   try {
+    ensureVendorSupportsAudio();
     if (state.microphone.session) {
       await stopMicrophoneCapture();
     }
@@ -69,6 +85,7 @@ export async function startSystemCapture() {
   let displayStream = null;
 
   try {
+    ensureVendorSupportsAudio();
     if (state.system.session) {
       await stopSystemCapture();
     }

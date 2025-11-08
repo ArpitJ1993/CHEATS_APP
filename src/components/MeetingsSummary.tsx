@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import OpenAIService from '../data/openaiService';
 import { Paper, Typography, Box } from '@mui/material';
 import { LoadingIndicator } from '../core-components/LoadingIndicator';
+import { createVendorProvider, getVendorMetadata } from '../vendors';
 
 interface MeetingsSummaryProps {
   enabled: boolean;
@@ -19,11 +19,55 @@ export const MeetingsSummary: React.FC<MeetingsSummaryProps> = ({ enabled, reset
   const observerRef = useRef<MutationObserver | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const inFlightAbortRef = useRef<() => void>();
+  const vendorKey = settings.vendorKeys?.[settings.vendor] || '';
+  const provider = useMemo(() => createVendorProvider(settings.vendor, vendorKey), [settings.vendor, vendorKey]);
 
-  const [openaiService] = useState(() => {
-    const apiKey = settings.apiKey || process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
-    return new OpenAIService(apiKey);
-  });
+  const runSummary = useCallback(() => {
+    const transcript = transcriptRef.current;
+    if (!transcript) return;
+
+    let cancelled = false;
+    inFlightAbortRef.current = () => { cancelled = true; };
+    setIsStreaming(true);
+
+    let buffer = '';
+
+    const callbacks = {
+      onChunk: (chunk: string) => {
+        if (cancelled) return;
+        buffer += chunk;
+        setSummary(buffer);
+      },
+      onComplete: () => {
+        if (cancelled) return;
+        setIsStreaming(false);
+      },
+      onError: () => {
+        if (cancelled) return;
+        setIsStreaming(false);
+      }
+    };
+
+    const summaryMessages = [
+      {
+        role: 'system' as const,
+        content: 'You are a real-time meeting summarizer. Produce concise summaries focused on key points, decisions, and action items.'
+      },
+      {
+        role: 'user' as const,
+        content: `Latest transcript chunk (append-only log, may contain duplicates):\n\n${transcript}\n\nReturn just the current best summary:`
+      }
+    ];
+
+    const summaryPromise = provider.streamAudioSummary
+      ? provider.streamAudioSummary({ transcript, callbacks })
+      : provider.streamText(summaryMessages, callbacks);
+
+    summaryPromise.catch(() => {
+      if (cancelled) return;
+      setIsStreaming(false);
+    });
+  }, [provider]);
 
   // Reset handler: clear only when resetCounter changes if we want to clear result but retain summary based on MeetingsPage logic
   useEffect(() => {
@@ -60,54 +104,7 @@ export const MeetingsSummary: React.FC<MeetingsSummaryProps> = ({ enabled, reset
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       if (inFlightAbortRef.current) inFlightAbortRef.current();
     };
-    return () => {
-      observerRef.current?.disconnect();
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
-      if (inFlightAbortRef.current) inFlightAbortRef.current();
-    };
-  }, [enabled]);
-
-  const runSummary = () => {
-    const transcript = transcriptRef.current;
-    if (!transcript) return;
-
-    // cancel any in-flight "streaming" by flipping a flag
-    let cancelled = false;
-    inFlightAbortRef.current = () => { cancelled = true; };
-    setIsStreaming(true);
-
-    let full = '';
-    const messages = [
-      {
-        role: 'system' as const,
-        content:
-          'You are a real-time meeting summarizer. Given running partial transcripts from microphone and system audio, produce a concise rolling summary focused on key points, decisions, action items, and topics. Keep it readable and continuously refine as more context arrives. Do not repeat previous text; output your best current summary only.'
-      },
-      {
-        role: 'user' as const,
-        content: `Latest transcript chunk (append-only log, may contain duplicates):\n\n${transcript}\n\nReturn just the current best summary:`
-      }
-    ];
-
-    openaiService
-      .sendMessage(
-        messages,
-        (chunk) => {
-          if (cancelled) return;
-          full += chunk;
-          setSummary(full);
-        },
-        () => {
-          if (cancelled) return;
-          setIsStreaming(false);
-        },
-        (err) => {
-          if (cancelled) return;
-          setIsStreaming(false);
-        }
-      )
-      .catch(() => setIsStreaming(false));
-  };
+  }, [enabled, runSummary]);
 
   return (
     <Paper elevation={2} sx={{ p: 2, height: 'calc(100vh - 160px)', overflow: 'auto', background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>

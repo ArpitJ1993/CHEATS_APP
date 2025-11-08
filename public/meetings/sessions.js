@@ -115,9 +115,19 @@ class Session {
 }
 
 export async function startSession({ type, stream, model, onError }) {
-  const apiKey = window.electronAPI?.getApiKey?.() || window.electronAPI?.apiKey;
+  const config = (window.__meetingsConfig || {});
+  const vendorId = config.vendorId || 'openai';
+  if (vendorId !== 'openai') {
+    throw new Error(`${config.vendorLabel || 'Selected vendor'} does not support realtime meeting audio yet.`);
+  }
+
+  let apiKey = config.apiKey;
   if (!apiKey) {
-    throw new Error('OpenAI API key not configured');
+    apiKey = window.electronAPI?.getVendorApiKey?.('openai') || window.electronAPI?.getApiKey?.() || window.electronAPI?.apiKey;
+  }
+
+  if (!apiKey) {
+    throw new Error('OpenAI API key not configured. Add it in Settings.');
   }
 
   const session = new Session(apiKey, type === 'microphone' ? 'microphone' : 'system_audio');

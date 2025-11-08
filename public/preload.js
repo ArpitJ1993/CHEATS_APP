@@ -2,6 +2,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // Build a single API object and expose once
 let currentApiKey = process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY || '';
+const vendorKeyStore = {
+  openai: currentApiKey,
+  gemini: '',
+  anthropic: '',
+  perplexity: ''
+};
 const electronAPIObj = {
   takeScreenshot: () => ipcRenderer.invoke('take-screenshot'),
   saveFile: (content, filename) => ipcRenderer.invoke('save-file', content, filename),
@@ -41,6 +47,8 @@ const electronAPIObj = {
   apiKey: currentApiKey,
   getApiKey: () => currentApiKey,
   setApiKey: (key) => ipcRenderer.invoke('set-openai-api-key', key),
+  setVendorApiKey: (vendor, key) => ipcRenderer.invoke('set-vendor-api-key', { vendor, key }),
+  getVendorApiKey: (vendor) => vendorKeyStore[vendor] || '',
   enableLoopbackAudio: () => ipcRenderer.invoke('enable-loopback-audio'),
   disableLoopbackAudio: () => ipcRenderer.invoke('disable-loopback-audio'),
   onVisibilityStatus: (callback) => {
@@ -57,5 +65,16 @@ contextBridge.exposeInMainWorld('electronAPI', electronAPIObj);
 // Keep renderer-side copy of API key in sync when setApiKey is called
 ipcRenderer.on('openai-api-key-updated', (_e, key) => {
   currentApiKey = typeof key === 'string' ? key : '';
+  vendorKeyStore.openai = currentApiKey;
   electronAPIObj.apiKey = currentApiKey;
+});
+
+ipcRenderer.on('vendor-api-key-updated', (_e, payload) => {
+  if (!payload || typeof payload.vendor !== 'string') return;
+  const { vendor, key } = payload;
+  vendorKeyStore[vendor] = typeof key === 'string' ? key : '';
+  if (vendor === 'openai') {
+    currentApiKey = vendorKeyStore.openai;
+    electronAPIObj.apiKey = currentApiKey;
+  }
 });

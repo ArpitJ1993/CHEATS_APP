@@ -1,9 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import OpenAIService from '../data/openaiService';
 import { Paper, Typography, Box, List, ListItem, ListItemText, Chip } from '@mui/material';
 import { LoadingIndicator } from '../core-components/LoadingIndicator';
+import { createVendorProvider } from '../vendors';
 
 interface Question {
   id: string;
@@ -29,11 +29,8 @@ export const MeetingsQuestions: React.FC<MeetingsQuestionsProps> = ({ enabled, o
   const observerRef = useRef<MutationObserver | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const questionsMapRef = useRef<Map<string, Question>>(new Map());
-
-  const [openaiService] = useState(() => {
-    const apiKey = settings.apiKey || process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY;
-    return new OpenAIService(apiKey);
-  });
+  const vendorKey = settings.vendorKeys?.[settings.vendor] || '';
+  const provider = useMemo(() => createVendorProvider(settings.vendor, vendorKey), [settings.vendor, vendorKey]);
 
   // Reset handler: when counter changes, clear questions state
   useEffect(() => {
@@ -42,6 +39,81 @@ export const MeetingsQuestions: React.FC<MeetingsQuestionsProps> = ({ enabled, o
     setQuestions([]);
     lastProcessedLengthRef.current = 0;
   }, [resetCounter]);
+
+  const validateQuestionsWithAI = useCallback(async () => {
+    const transcript = transcriptRef.current;
+    if (!transcript || transcript.length < 50) return;
+
+    setIsProcessing(true);
+
+    try {
+      const messages = [
+        {
+          role: 'system' as const,
+          content:
+            'You are a question extraction specialist. Analyze the transcript and identify ALL questions. Be comprehensive - catch questions that end with "?", rhetorical questions, indirect questions, and clarification requests. Return ONLY valid JSON array: [{"q":"exact question text","s":"microphone" or "system"}]. No markdown, no explanation.'
+        },
+        {
+          role: 'user' as const,
+          content: `Transcript:\n${transcript}\n\nExtract all questions as JSON array:`
+        }
+      ];
+
+      let response = '';
+      await provider.streamText(
+        messages,
+        {
+          onChunk: (chunk: string) => { response += chunk; },
+          onComplete: () => {
+            try {
+              // Multiple JSON extraction attempts
+              let extracted = null;
+
+              // Try 1: Direct parse
+              try {
+                extracted = JSON.parse(response);
+              } catch {
+                // Try 2: Find JSON array in response
+                const jsonMatch = response.match(/\[[\s\S]*?\]/);
+                if (jsonMatch) {
+                  extracted = JSON.parse(jsonMatch[0]);
+                }
+              }
+
+              if (Array.isArray(extracted) && extracted.length > 0) {
+                extracted.forEach((item: { q?: string; question?: string; s?: string; source?: string }) => {
+                  const questionText = item.q || item.question;
+                  const source = (item.s || item.source) === 'system' ? 'system' : 'microphone';
+
+                  if (questionText && questionText.trim().length > 5) {
+                    const questionId = `ai-${source}-${questionText.substring(0, 50)}`;
+
+                    if (!questionsMapRef.current.has(questionId)) {
+                      questionsMapRef.current.set(questionId, {
+                        id: questionId,
+                        text: questionText.trim(),
+                        source,
+                        timestamp: new Date().toLocaleTimeString()
+                      });
+                    }
+                  }
+                });
+
+                setQuestions(Array.from(questionsMapRef.current.values()));
+              }
+            } catch (e) {
+              console.warn('AI validation parse error', e);
+            }
+            setIsProcessing(false);
+          },
+          onError: () => setIsProcessing(false)
+        }
+      );
+    } catch (err) {
+      console.error('AI validation error', err);
+      setIsProcessing(false);
+    }
+  }, [provider]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -82,80 +154,7 @@ export const MeetingsQuestions: React.FC<MeetingsQuestionsProps> = ({ enabled, o
       observerRef.current?.disconnect();
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [enabled]);
-
-  const validateQuestionsWithAI = async () => {
-    const transcript = transcriptRef.current;
-    if (!transcript || transcript.length < 50) return;
-
-    setIsProcessing(true);
-
-    try {
-      const messages = [
-        {
-          role: 'system' as const,
-          content:
-            'You are a question extraction specialist. Analyze the transcript and identify ALL questions. Be comprehensive - catch questions that end with "?", rhetorical questions, indirect questions, and clarification requests. Return ONLY valid JSON array: [{"q":"exact question text","s":"microphone" or "system"}]. No markdown, no explanation.'
-        },
-        {
-          role: 'user' as const,
-          content: `Transcript:\n${transcript}\n\nExtract all questions as JSON array:`
-        }
-      ];
-
-      let response = '';
-      await openaiService.sendMessage(
-        messages,
-        (chunk) => { response += chunk; },
-        () => {
-          try {
-            // Multiple JSON extraction attempts
-            let extracted = null;
-            
-            // Try 1: Direct parse
-            try {
-              extracted = JSON.parse(response);
-            } catch {
-              // Try 2: Find JSON array in response
-              const jsonMatch = response.match(/\[[\s\S]*?\]/);
-              if (jsonMatch) {
-                extracted = JSON.parse(jsonMatch[0]);
-              }
-            }
-            
-            if (Array.isArray(extracted) && extracted.length > 0) {
-              extracted.forEach((item: { q?: string; question?: string; s?: string; source?: string }) => {
-                const questionText = item.q || item.question;
-                const source = (item.s || item.source) === 'system' ? 'system' : 'microphone';
-                
-                if (questionText && questionText.trim().length > 5) {
-                  const questionId = `ai-${source}-${questionText.substring(0, 50)}`;
-                  
-                  if (!questionsMapRef.current.has(questionId)) {
-                    questionsMapRef.current.set(questionId, {
-                      id: questionId,
-                      text: questionText.trim(),
-                      source,
-                      timestamp: new Date().toLocaleTimeString()
-                    });
-                  }
-                }
-              });
-              
-              setQuestions(Array.from(questionsMapRef.current.values()));
-            }
-          } catch (e) {
-            console.warn('AI validation parse error', e);
-          }
-          setIsProcessing(false);
-        },
-        () => setIsProcessing(false)
-      );
-    } catch (err) {
-      console.error('AI validation error', err);
-      setIsProcessing(false);
-    }
-  };
+  }, [enabled, validateQuestionsWithAI]);
 
   return (
     <Paper elevation={2} sx={{ p: 2, height: 'calc(100vh - 160px)', overflow: 'auto', background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>

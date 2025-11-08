@@ -1,5 +1,7 @@
 # Hard work and patience cannot be substituted by cheating
 
+> **Version 2** — refreshed architecture with multi-vendor model discovery and improved multimodal workflows.
+
 Author: Arpit J Soni  
 LinkedIn: [linkedin.com/in/arpit-j-soni](https://www.linkedin.com/in/arpit-j-soni)
 
@@ -24,7 +26,13 @@ LinkedIn: [linkedin.com/in/arpit-j-soni](https://www.linkedin.com/in/arpit-j-son
   ```
   - The command starts the React dev server and launches Electron after the app is reachable.
 
-## Features
+## Version 2 Highlights
+- **Choose your favorite LLM** for every request—swap between OpenAI (ChatGPT), Google Gemini, Perplexity, or Claude (Anthropic) right from the app.
+- **Unified multimodal support** across all providers: mix text plus multiple screenshots in one prompt and get a single streaming answer.
+- **Smarter fallbacks** so retired or unavailable models are replaced automatically without you touching settings.
+- **Cleaner setup** that keeps your provider configuration in sync and ready for future upgrades (voice, tools, etc.).
+
+## Core Features
 - Screenshot capture with automatic window-hide during capture (restores immediately).
 - Multimodal querying (text + screenshots) with streaming AI responses.
 - Meeting transcription page with dual-stream setup (microphone + system audio; renderer code provided).

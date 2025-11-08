@@ -4,11 +4,12 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../store';
 import { Button } from '../core-components/Button';
 import { Input } from '../core-components/Input';
-import { 
-  setTheme, 
-  setFontSize, 
-  setApiKey, 
-  setMaxScreenshots, 
+import {
+  setTheme,
+  setFontSize,
+  setVendor,
+  setVendorApiKey,
+  setMaxScreenshots,
   setAutoSave,
   setSaveLocation,
   updateShortcut,
@@ -16,8 +17,9 @@ import {
   updateSettings
 } from '../slices/settingsSlice';
 import { ThemeMode } from '../enums';
-import { useDispatch as useAppDispatch } from 'react-redux';
 import { setCurrentView } from '../slices/appSlice';
+import { VENDOR_IDS, VENDOR_METADATA } from '../vendors';
+import type { VendorId } from '../vendors/types';
 
 const SettingsContainer = styled.div`
   display: flex;
@@ -69,7 +71,7 @@ const Select = styled.select`
   color: var(--color-text);
   font-family: var(--font-family);
   font-size: var(--font-size-medium);
-  
+
   &:focus {
     outline: none;
     border-color: var(--color-primary);
@@ -88,18 +90,23 @@ export const SettingsPanel: React.FC = () => {
   const { settings } = useSelector((state: RootState) => state.settings);
   const [saveStatus, setSaveStatus] = useState<string>('');
 
+  const vendorMetadata = VENDOR_METADATA[settings.vendor];
+  const currentVendorKey = settings.vendorKeys?.[settings.vendor] || '';
+
   // On mount, if we already have a key in settings, push it to main once
   useEffect(() => {
     const maybePushKey = async () => {
       try {
-        const existing = (window as any)?.electronAPI?.getApiKey?.();
-        if (settings.apiKey && settings.apiKey !== existing) {
-          await (window as any)?.electronAPI?.setApiKey?.(settings.apiKey);
+        if (settings.vendor === 'openai') {
+          const existing = (window as any)?.electronAPI?.getVendorApiKey?.('openai');
+          if (currentVendorKey && currentVendorKey !== existing) {
+            await (window as any)?.electronAPI?.setVendorApiKey?.('openai', currentVendorKey);
+          }
         }
       } catch {}
     };
     maybePushKey();
-  }, [settings.apiKey]);
+  }, [settings.vendor, currentVendorKey]);
 
   const handleThemeChange = (theme: 'light' | 'dark' | 'auto') => {
     dispatch(setTheme(theme));
@@ -109,18 +116,27 @@ export const SettingsPanel: React.FC = () => {
     dispatch(setFontSize(fontSize));
   };
 
-  const handleApiKeyChange = (apiKey: string) => {
-    dispatch(setApiKey(apiKey));
+  const handleVendorChange = (vendor: VendorId) => {
+    dispatch(setVendor(vendor));
+    setSaveStatus('');
   };
 
-  const handleSaveApiKey = async () => {
+  const handleVendorKeyChange = (key: string) => {
+    dispatch(setVendorApiKey({ vendor: settings.vendor, key }));
+  };
+
+  const handleSaveVendorKey = async () => {
     try {
       setSaveStatus('');
-      if (!(window as any)?.electronAPI?.setApiKey) {
-        setSaveStatus('Electron API unavailable.');
-        return;
+      dispatch(setVendorApiKey({ vendor: settings.vendor, key: currentVendorKey }));
+
+      if ((window as any)?.electronAPI?.setVendorApiKey) {
+        await (window as any).electronAPI.setVendorApiKey(settings.vendor, currentVendorKey);
+      } else if (settings.vendor === 'openai' && (window as any)?.electronAPI?.setApiKey) {
+        // Backwards compatibility with older preload
+        await (window as any).electronAPI.setApiKey(currentVendorKey);
       }
-      await (window as any).electronAPI.setApiKey(settings.apiKey);
+
       setSaveStatus('API key saved.');
       // Optional: brief clear
       setTimeout(() => setSaveStatus(''), 2000);
@@ -155,7 +171,7 @@ export const SettingsPanel: React.FC = () => {
       </div>
       <Section>
         <SectionTitle>Appearance</SectionTitle>
-        
+
         <SettingGroup>
           <SettingLabel>Theme</SettingLabel>
           <Select
@@ -189,20 +205,35 @@ export const SettingsPanel: React.FC = () => {
 
       <Section>
         <SectionTitle>API Configuration</SectionTitle>
-        
+
         <SettingGroup>
-          <SettingLabel>OpenAI API Key</SettingLabel>
+          <SettingLabel>Select Vendor</SettingLabel>
+          <Select
+            value={settings.vendor}
+            onChange={(e) => handleVendorChange(e.target.value as VendorId)}
+          >
+            {VENDOR_IDS.map((vendorId) => (
+              <option key={vendorId} value={vendorId}>{VENDOR_METADATA[vendorId].label}</option>
+            ))}
+          </Select>
+          <SettingDescription>
+            {vendorMetadata.description}
+          </SettingDescription>
+        </SettingGroup>
+
+        <SettingGroup>
+          <SettingLabel>{vendorMetadata.label} API Key</SettingLabel>
           <Input
-            value={settings.apiKey}
-            onChange={handleApiKeyChange}
-            placeholder="sk-..."
+            value={currentVendorKey}
+            onChange={handleVendorKeyChange}
+            placeholder={settings.vendor === 'openai' ? 'sk-...' : 'Enter API Key'}
             type="password"
           />
           <SettingDescription>
-            Your OpenAI API key for AI responses
+            Provide the API key for the selected vendor
           </SettingDescription>
           <div>
-            <Button variant="primary" onClick={handleSaveApiKey}>Save API Key</Button>
+            <Button variant="primary" onClick={handleSaveVendorKey}>Save API Key</Button>
             {saveStatus && (
               <span style={{ marginLeft: 8, color: 'var(--color-text-secondary)', fontSize: '0.9em' }}>{saveStatus}</span>
             )}
@@ -212,7 +243,7 @@ export const SettingsPanel: React.FC = () => {
 
       <Section>
         <SectionTitle>Meeting Participants</SectionTitle>
-        
+
         <SettingGroup>
           <SettingLabel>Your Name (Own)</SettingLabel>
           <Input
@@ -240,7 +271,7 @@ export const SettingsPanel: React.FC = () => {
 
       <Section>
         <SectionTitle>Limits & Behavior</SectionTitle>
-        
+
         <SettingGroup>
           <SettingLabel>Max Screenshots</SettingLabel>
           <Input
@@ -287,7 +318,7 @@ export const SettingsPanel: React.FC = () => {
 
       <Section>
         <SectionTitle>Keyboard Shortcuts</SectionTitle>
-        
+
         <SettingGroup>
           <SettingLabel>Screenshot Shortcut</SettingLabel>
           <Input

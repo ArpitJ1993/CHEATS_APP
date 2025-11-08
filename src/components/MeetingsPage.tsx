@@ -1,16 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback } from 'react';
 import styled from '@emotion/styled';
 import { useDispatch } from 'react-redux';
 import { setCurrentView } from '../slices/appSlice';
 import { Button } from '../core-components/Button';
-import { Box, Grid, Paper, Typography, Button as MUIButton, FormControl, InputLabel, Select, Chip, Switch, FormControlLabel } from '@mui/material';
+import { Box, Grid, Paper, Typography, FormControl, InputLabel, Select, Chip, Switch, FormControlLabel } from '@mui/material';
 import MeetingsSummary from './MeetingsSummary';
 import MeetingsQuestions from './MeetingsQuestions';
-import OpenAIService from '../data/openaiService';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import ReactMarkdown from 'react-markdown';
 import { LoadingIndicator } from '../core-components/LoadingIndicator';
+import { createVendorProvider, getVendorMetadata } from '../vendors';
 
 const Wrapper = styled.div`
   display: flex;
@@ -75,6 +75,39 @@ const Results = styled.pre`
   overflow-y: auto;
 `;
 
+const Overlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(8, 10, 20, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+  z-index: 20;
+`;
+
+const OverlayContent = styled.div`
+  background: rgba(20, 24, 35, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 520px;
+  width: 90%;
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.4);
+`;
+
+const OverlayActions = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 24px;
+`;
+
 export const MeetingsPage: React.FC = () => {
   const dispatch = useDispatch();
   const { settings } = useSelector((state: RootState) => state.settings);
@@ -85,8 +118,32 @@ export const MeetingsPage: React.FC = () => {
   const [inputText, setInputText] = React.useState('');
   const [resultText, setResultText] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const vendorMetadata = useMemo(() => getVendorMetadata(settings.vendor), [settings.vendor]);
+  const vendorKey = settings.vendorKeys?.[settings.vendor] || '';
+  const provider = useMemo(() => createVendorProvider(settings.vendor, vendorKey), [settings.vendor, vendorKey]);
 
-  const [openaiService] = React.useState(() => new OpenAIService(settings.apiKey || process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY));
+  const audioRequirementsMessage = useMemo(() => {
+    if (!vendorMetadata.supportsMeetingsAudio) {
+      return `${vendorMetadata.label} does not currently support meeting audio in this application.`;
+    }
+    if (!vendorKey) {
+      return `Add a ${vendorMetadata.label} API key in Settings to enable meeting transcription.`;
+    }
+    return null;
+  }, [vendorMetadata, vendorKey]);
+
+  useEffect(() => {
+    (window as any).__meetingsConfig = {
+      vendorId: settings.vendor,
+      vendorLabel: vendorMetadata.label,
+      apiKey: vendorKey,
+      supportsMeetingsAudio: vendorMetadata.supportsMeetingsAudio
+    };
+
+    return () => {
+      delete (window as any).__meetingsConfig;
+    };
+  }, [settings.vendor, vendorMetadata.label, vendorMetadata.supportsMeetingsAudio, vendorKey]);
 
   useEffect(() => {
     const micResults = document.getElementById('micResults');
@@ -106,8 +163,11 @@ export const MeetingsPage: React.FC = () => {
 
     const isDev = process.env.NODE_ENV === 'development' || process.env.REACT_APP_DEV === 'true';
 
+    if (!vendorMetadata.supportsMeetingsAudio || !vendorKey) {
+      return;
+    }
+
     const script = document.createElement('script');
-    // Use relative path in production so file:// resolves to build/meetingsRenderer.js
     script.src = isDev ? '/meetingsRenderer.js' : 'meetingsRenderer.js';
     script.type = 'module';
     script.async = true;
@@ -115,16 +175,13 @@ export const MeetingsPage: React.FC = () => {
 
     return () => {
       try {
-        // Reset the global flag so the script can re-initialize on next mount
         (window as any).__meetingsRendererLoaded = false;
         if (script.parentNode) {
           document.body.removeChild(script);
         }
-      } catch (e) {
-        // Script might already be removed
-      }
+      } catch (e) {}
     };
-  }, []);
+  }, [vendorMetadata.supportsMeetingsAudio, vendorKey]);
 
   const handleQuestionSelect = (text: string) => {
     setInputText(text);
@@ -138,9 +195,14 @@ export const MeetingsPage: React.FC = () => {
     // Do NOT clear summary here per requirements
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     const q = inputText.trim();
     if (!q) return;
+
+    if (!vendorKey) {
+      setResultText(`Add your ${vendorMetadata.label} API key in Settings before submitting.`);
+      return;
+    }
     setIsSubmitting(true);
     setResultText('');
     let full = '';
@@ -149,19 +211,19 @@ export const MeetingsPage: React.FC = () => {
       { role: 'user' as const, content: q }
     ];
     try {
-      await openaiService.sendMessage(
-        messages,
-        (chunk) => {
+      await provider.streamText(messages, {
+        onChunk: (chunk: string) => {
           full += chunk;
           setResultText(full);
         },
-        () => setIsSubmitting(false),
-        () => setIsSubmitting(false)
-      );
-    } catch {
+        onComplete: () => setIsSubmitting(false),
+        onError: () => setIsSubmitting(false)
+      });
+    } catch (error) {
+      console.error('Meeting answer generation failed:', error);
       setIsSubmitting(false);
     }
-  };
+  }, [inputText, provider, vendorKey, vendorMetadata.label]);
 
   const handleExport = async () => {
     const mic = (document.getElementById('micResults')?.textContent || '').trim();
@@ -191,6 +253,23 @@ export const MeetingsPage: React.FC = () => {
 
   return (
     <Wrapper>
+      {audioRequirementsMessage && (
+        <Overlay>
+          <OverlayContent>
+            <Typography variant="h6" gutterBottom sx={{ color: '#fff', fontWeight: 600 }}>
+              Meeting audio unavailable for {vendorMetadata.label}
+            </Typography>
+            <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.85)', mb: 2 }}>
+              {audioRequirementsMessage}
+            </Typography>
+            <OverlayActions>
+              <Button variant="primary" onClick={() => dispatch(setCurrentView('main'))}>
+                Go Back to Home
+              </Button>
+            </OverlayActions>
+          </OverlayContent>
+        </Overlay>
+      )}
       <Container>
         <Box display="flex" justifyContent="space-between" alignItems="center" mt={1} mb={1}>
           <Button variant="outlined" onClick={() => dispatch(setCurrentView('main'))}>⬅ Back</Button>

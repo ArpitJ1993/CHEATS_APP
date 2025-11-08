@@ -10,6 +10,13 @@ const execAsync = promisify(exec);
 
 const audioService = require('./audioService');
 
+const vendorApiKeys = {
+  openai: audioService.apiKey || process.env.OPENAI_API_KEY || process.env.REACT_APP_OPENAI_API_KEY || '',
+  gemini: '',
+  anthropic: '',
+  perplexity: ''
+};
+
 const isDev = process.env.NODE_ENV === 'development' || process.env.npm_lifecycle_event === 'electron-dev';
 
 try {
@@ -883,9 +890,38 @@ ipcMain.handle('transcribe-audio-direct', async (_evt, arrayBuffer) => {
 });
 
 ipcMain.handle('set-openai-api-key', async (_evt, key) => {
-  const res = audioService.setApiKey(key);
-  try { mainWindow?.webContents?.send('openai-api-key-updated', key); } catch {}
-  return res;
+  return setVendorApiKeyInternal('openai', key);
 });
+
+ipcMain.handle('set-vendor-api-key', async (_evt, payload) => {
+  const { vendor, key } = payload || {};
+  if (!vendorApiKeys.hasOwnProperty(vendor)) {
+    return { success: false, error: `Unsupported vendor: ${vendor}` };
+  }
+  return setVendorApiKeyInternal(vendor, key);
+});
+
+ipcMain.handle('get-vendor-api-key', (_evt, vendor) => {
+  return vendorApiKeys[vendor] || '';
+});
+
+function setVendorApiKeyInternal(vendor, key) {
+  const normalizedKey = typeof key === 'string' ? key.trim() : '';
+  vendorApiKeys[vendor] = normalizedKey;
+
+  if (vendor === 'openai') {
+    const result = audioService.setApiKey(normalizedKey);
+    if (!result.success) {
+      return result;
+    }
+    try { mainWindow?.webContents?.send('openai-api-key-updated', normalizedKey); } catch {}
+  }
+
+  try {
+    mainWindow?.webContents?.send('vendor-api-key-updated', { vendor, key: normalizedKey });
+  } catch {}
+
+  return { success: true };
+}
 
 
