@@ -32,21 +32,34 @@
   box-sizing: border-box;
 }
 
-html, body {
-  margin: 0;
-  padding: 0;
+html, body, #root {
   height: 100%;
-  font-family: var(--font-family);
-  font-size: var(--font-size-medium);
-  line-height: 1.5;
-  color: var(--color-text);
+  margin: 0;
+  font-family: 'Inter', 'system-ui', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--color-background);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  color: var(--color-text);
+}
+
+button,
+input,
+textarea,
+select,
+a,
+label {
+  cursor: default;
+}
+
+.MuiSwitch-root,
+.MuiSwitch-switchBase,
+.MuiSwitch-thumb,
+.MuiSwitch-track,
+.MuiFormControlLabel-root,
+.MuiSelect-select,
+.MuiMenuItem-root {
+  cursor: default !important;
 }
 
 #root {
-  height: 100%;
   width: 100%;
 }
 

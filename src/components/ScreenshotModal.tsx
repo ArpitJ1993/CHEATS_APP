@@ -28,23 +28,13 @@ const ModalContent = styled.div`
 const CloseButton = styled.button`
   position: absolute;
   top: 10px;
-  right: 10px;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
+  right: 14px;
+  background: transparent;
   border: none;
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 20px;
-  z-index: 1001;
-  
-  &:hover {
-    background: rgba(0, 0, 0, 0.9);
-  }
+  color: var(--color-text-secondary);
+  cursor: default;
+  font-size: 1.5rem;
+  padding: 4px;
 `;
 
 const ScreenshotImage = styled.img`

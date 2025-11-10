@@ -115,7 +115,7 @@ export const MeetingsSummary: React.FC<MeetingsSummaryProps> = ({ enabled, reset
         <button 
           type="button"
           onClick={() => setSummary('')}
-          style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--color-border)', cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}
+          style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--color-border)', cursor: 'default', background: 'transparent', color: 'var(--color-text)' }}
         >
           Clear Summary
         </button>

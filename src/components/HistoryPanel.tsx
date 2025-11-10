@@ -35,7 +35,7 @@ const ConversationItem = styled.div`
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background-color: var(--color-surface);
-  cursor: pointer;
+  cursor: default;
   transition: all 0.2s ease-in-out;
   
   &:hover {

@@ -16,21 +16,21 @@ const ToggleContainer = styled.div`
   border: 1px solid var(--color-border);
 `;
 
-const ToggleButton = styled.button<{ active: boolean }>`
+const ToggleButton = styled.button<{ $active: boolean }>`
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 6px;
-  background: ${props => props.active ? 'var(--color-primary)' : 'transparent'};
-  color: ${props => props.active ? 'white' : 'var(--color-text-secondary)'};
-  cursor: pointer;
-  transition: all 0.2s ease;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: default;
+  color: var(--color-text);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
   
   &:hover {
-    background: ${props => props.active ? 'var(--color-primary)' : 'var(--color-surface)'};
+    background: ${(props) => (props.$active ? 'var(--color-primary)' : 'var(--color-surface)')};
     color: var(--color-text);
   }
   
@@ -65,7 +65,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ className }) => {
   return (
     <ToggleContainer className={className}>
       <ToggleButton
-        active={themeMode === ThemeMode.LIGHT}
+        $active={themeMode === ThemeMode.LIGHT}
         onClick={() => handleThemeChange(ThemeMode.LIGHT)}
         title="Light Mode"
       >
@@ -75,7 +75,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ className }) => {
       </ToggleButton>
       
       <ToggleButton
-        active={themeMode === ThemeMode.DARK}
+        $active={themeMode === ThemeMode.DARK}
         onClick={() => handleThemeChange(ThemeMode.DARK)}
         title="Dark Mode"
       >
@@ -85,7 +85,7 @@ export const ThemeToggle: React.FC<ThemeToggleProps> = ({ className }) => {
       </ToggleButton>
       
       <ToggleButton
-        active={themeMode === ThemeMode.AUTO}
+        $active={themeMode === ThemeMode.AUTO}
         onClick={() => handleThemeChange(ThemeMode.AUTO)}
         title="Auto Mode (Follow System)"
       >

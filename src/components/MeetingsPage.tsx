@@ -286,18 +286,20 @@ export const MeetingsPage: React.FC = () => {
                 <button
                   id="startMicBtn"
                   type="button"
-                  style={{
-                    padding: '6px 16px',
-                    fontSize: '0.875rem',
-                    fontWeight: 500,
-                    borderRadius: '4px',
-                    border: 'none',
-                    backgroundColor: '#1976d2',
-                    color: 'white',
-                    cursor: 'pointer',
-                    textTransform: 'uppercase',
-                    boxShadow: '0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12)'
-                  }}
+                  style={
+                    {
+                      padding: '6px 16px',
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      borderRadius: '4px',
+                      border: 'none',
+                      backgroundColor: '#1976d2',
+                      color: 'white',
+                      cursor: 'default',
+                      textTransform: 'uppercase',
+                      boxShadow: '0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12)'
+                    }
+                  }
                 >
                   Start Microphone
                 </button>
@@ -312,7 +314,7 @@ export const MeetingsPage: React.FC = () => {
                     border: 'none',
                     backgroundColor: '#388e3c',
                     color: 'white',
-                    cursor: 'pointer',
+                    cursor: 'default',
                     textTransform: 'uppercase',
                     boxShadow: '0px 3px 1px -2px rgba(0,0,0,0.2), 0px 2px 2px 0px rgba(0,0,0,0.14), 0px 1px 5px 0px rgba(0,0,0,0.12)'
                   }}
@@ -331,7 +333,7 @@ export const MeetingsPage: React.FC = () => {
                     border: '1px solid rgba(25, 118, 210, 0.5)',
                     backgroundColor: 'transparent',
                     color: '#1976d2',
-                    cursor: 'pointer',
+                    cursor: 'default',
                     textTransform: 'uppercase'
                   }}
                 >
@@ -394,9 +396,9 @@ export const MeetingsPage: React.FC = () => {
         </Grid>
 
         <Box display="flex" justifyContent="flex-end" alignItems="center" gap={8} mt={2} mb={1}>
-          <button type="button" onClick={handleReset} style={{ padding: '8px 14px', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>Reset</button>
-          <button type="button" onClick={handleSubmit} disabled={isSubmitting || !inputText.trim()} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: '#1976d2', color: 'white', cursor: 'pointer', opacity: isSubmitting || !inputText.trim() ? 0.7 : 1 }}>Submit</button>
-          <button type="button" onClick={handleExport} style={{ padding: '8px 14px', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer', background: 'transparent', color: 'var(--color-text)' }}>Export</button>
+          <button type="button" onClick={handleReset} style={{ padding: '8px 14px', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'default', background: 'transparent', color: 'var(--color-text)' }}>Reset</button>
+          <button type="button" onClick={handleSubmit} disabled={isSubmitting || !inputText.trim()} style={{ padding: '8px 14px', borderRadius: 6, border: 'none', background: '#1976d2', color: 'white', cursor: 'default', opacity: isSubmitting || !inputText.trim() ? 0.7 : 1 }}>Submit</button>
+          <button type="button" onClick={handleExport} style={{ padding: '8px 14px', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'default', background: 'transparent', color: 'var(--color-text)' }}>Export</button>
         </Box>
       </Container>
     </Wrapper>

@@ -24,13 +24,14 @@ const ScreenshotGrid = styled.div`
   gap: var(--spacing-sm);
 `;
 
-const ScreenshotItem = styled.div`
+const ScreenshotItem = styled.div<{ isSelected: boolean }>`
   position: relative;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   overflow: hidden;
-  background-color: var(--color-surface);
-  cursor: pointer;
+  background-color: rgba(255, 255, 255, 0.02);
+  cursor: default;
+  outline: ${(props) => (props.isSelected ? '2px solid var(--color-primary)' : 'none')};
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   
   &:hover {
@@ -126,7 +127,11 @@ export const ScreenshotGallery: React.FC<ScreenshotGalleryProps> = ({
       <GalleryTitle>Screenshots ({screenshots.length})</GalleryTitle>
       <ScreenshotGrid>
         {screenshots.map((screenshot, index) => (
-          <ScreenshotItem key={screenshot.id} onClick={() => handleScreenshotClick(screenshot)}>
+          <ScreenshotItem
+            key={screenshot.id}
+            isSelected={selectedScreenshot?.id === screenshot.id}
+            onClick={() => handleScreenshotClick(screenshot)}
+          >
             <ScreenshotImage
               src={`data:image/png;base64,${screenshot.data}`}
               alt={`Screenshot ${index + 1}`}

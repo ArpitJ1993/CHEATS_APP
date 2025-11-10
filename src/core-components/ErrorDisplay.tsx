@@ -95,18 +95,14 @@ const ErrorDetails = styled.p`
 `;
 
 const RetryButton = styled.button`
-  background: none;
+  margin-top: 12px;
+  padding: 8px 16px;
+  border-radius: 6px;
   border: none;
-  color: var(--color-primary);
-  font-size: var(--font-size-small);
-  cursor: pointer;
-  text-decoration: underline;
-  padding: 0;
-  margin-top: 8px;
-
-  &:hover {
-    color: color-mix(in srgb, var(--color-primary) 80%, black);
-  }
+  background: #1976d2;
+  color: white;
+  cursor: default;
+  font-weight: 600;
 `;
 
 interface ErrorDisplayProps {
