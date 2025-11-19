@@ -37,6 +37,16 @@ const MIN_OPACITY = 0.2;
 const MAX_OPACITY = 1.0;
 const OPACITY_STEP = 0.1;
 
+function ensureWindowOnTop(win) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.moveTop();
+  } catch (error) {
+    console.log('Failed to keep window on top:', error?.message || error);
+  }
+}
+
 function setupScreenSharingDetection() {
   let isScreenSharing = false;
   let windowStateBeforeHiding = null;
@@ -128,6 +138,9 @@ function setupScreenSharingDetection() {
           
           if (!mainWindow.isVisible()) {
             mainWindow.show();
+            ensureWindowOnTop(mainWindow);
+          } else {
+            ensureWindowOnTop(mainWindow);
           }
           
           isScreenSharing = true;
@@ -153,6 +166,7 @@ function setupScreenSharingDetection() {
           }
           
           mainWindow.focus();
+          ensureWindowOnTop(mainWindow);
           
           isScreenSharing = false;
           
@@ -175,6 +189,7 @@ function setupScreenSharingDetection() {
             mainWindow.show();
           }
           mainWindow.focus();
+          ensureWindowOnTop(mainWindow);
           isScreenSharing = false;
         }
       }
@@ -340,9 +355,10 @@ function restoreFromScreenSharing(windowStateBeforeHiding) {
       
       mainWindow.show();
       mainWindow.focus();
+      ensureWindowOnTop(mainWindow);
       
       mainWindow.setSkipTaskbar(false);
-      mainWindow.setAlwaysOnTop(false);
+      ensureWindowOnTop(mainWindow);
       
       console.log('App visibility restored to normal');
     } catch (error) {
@@ -455,6 +471,7 @@ function createWindow() {
     windowOptions.icon = windowIconCandidate;
   }
   mainWindow = new BrowserWindow(windowOptions);
+  ensureWindowOnTop(mainWindow);
 
   try { mainWindow.setOpacity(currentOpacity); } catch {}
 
@@ -538,6 +555,7 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
+    ensureWindowOnTop(mainWindow);
     if (process.platform === 'darwin') {
       mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     }
@@ -587,6 +605,10 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
+});
+
+app.on('browser-window-focus', (_event, win) => {
+  ensureWindowOnTop(win);
 });
 
 ipcMain.handle('take-screenshot', async () => {
@@ -698,6 +720,7 @@ function manuallyShowApp() {
       disableContentProtection();
       try { mainWindow.show(); } catch {}
       try { mainWindow.focus(); } catch {}
+      ensureWindowOnTop(mainWindow);
       if (process.platform === 'darwin') {
         try { app.dock?.show?.(); } catch {}
       }
@@ -755,7 +778,7 @@ ipcMain.handle('show-app-window', () => {
     if (!mainWindow) return { success: false, message: 'No main window found' };
     try { if (process.platform === 'darwin') app.dock?.show?.(); } catch {}
     try { mainWindow.setSkipTaskbar(false); } catch {}
-    try { mainWindow.show(); mainWindow.focus(); } catch {}
+    try { mainWindow.show(); mainWindow.focus(); ensureWindowOnTop(mainWindow); } catch {}
     return { success: true };
   } catch (e) {
     return { success: false, message: e?.message || String(e) };
